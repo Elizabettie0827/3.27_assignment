@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background: #f3f1eb;
+            font-family: Arial, sans-serif;
+        }
+        .title {
+            font-size: 18px;
+            font-weight: bold;
+            fill: #333;
+        }
+        .source {
+            font-size: 12px;
+            fill: #555;
+        }
+        .axis path,
+        .axis line {
+            stroke: #333;
+            stroke-width: 1;
+        }
+        .axis text {
+            fill: #333;
+            font-size: 11px;
+        }
+        .legend text {
+            font-size: 12px;
+            fill: #333;
+        }
+    </style>
+</head>
+<body>
+
+<svg width="1220" height="620"></svg>
+
+<script>
+const svg = d3.select("svg"),
+      width = +svg.attr("width"),
+      height = +svg.attr("height"),
+      margin = {top: 60, right: 250, bottom: 70, left: 60},
+      innerWidth = width - margin.left - margin.right,
+      innerHeight = height - margin.top - margin.bottom;
+
+const g = svg.append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+svg.append("text")
+    .attr("class", "title")
+    .attr("x", width / 2)
+    .attr("y", 30)
+    .attr("text-anchor", "middle")
+    .text("College Enrollment Streamgraph (2015–2024)");
+
+d3.csv("data.csv").then(function(data) {
+
+    const yearKey = data.columns[0];
+    const keys = data.columns.slice(1).map(d => d.trim()); // modified: get category names from csv
+
+    data = data.filter(d => d[yearKey] && d[yearKey].trim() !== ""); // modified: remove empty rows
+
+    data.forEach(d => {
+        d.Year = +d[yearKey]; // modified: convert year to number
+        keys.forEach(k => d[k] = +d[k]); // modified: convert category values to numbers
+    });
+
+    data = data.filter(d => !isNaN(d.Year)); // modified: keep valid years only
+    data.sort((a, b) => a.Year - b.Year); // modified: sort by year
+
+    const stack = d3.stack()
+        .keys(keys) // modified: build stack from csv category columns
+        .offset(d3.stackOffsetSilhouette)
+        .order(d3.stackOrderInsideOut);
+
+    const stackedData = stack(data);
+
+    const yMin = d3.min(stackedData, layer => d3.min(layer, d => d[0]));
+    const yMax = d3.max(stackedData, layer => d3.max(layer, d => d[1]));
+    const ySpan = yMax - yMin; // modified: shift streamgraph so displayed axis starts at 0
+
+    const x = d3.scalePoint()
+        .domain(data.map(d => d.Year))
+        .range([0, innerWidth]);
+
+    const y = d3.scaleLinear()
+        .domain([0, ySpan]) // modified: positive display domain only
+        .range([innerHeight, 0]);
+
+    const color = d3.scaleOrdinal()
+        .domain(keys)
+        .range([
+            "#7f0000",
+            "#b30000",
+            "#d7301f",
+            "#ef6548",
+            "#fdbb84",
+            "#fdd49e"
+        ]); // modified: use warm palette
+
+    const area = d3.area()
+        .x(d => x(d.data.Year)) // modified: map x by year
+        .y0(d => y(d[0] - yMin)) // modified: shift baseline upward
+        .y1(d => y(d[1] - yMin)) // modified: shift baseline upward
+        .curve(d3.curveBasis); // modified: smooth stream shape
+
+    g.selectAll("path.stream")
+        .data(stackedData)
+        .enter()
+        .append("path")
+        .attr("class", "stream")
+        .attr("d", area)
+        .attr("fill", d => color(d.key))
+        .attr("stroke", "none"); // modified: remove border
+
+    g.append("g")
+        .attr("class", "axis")
+        .attr("transform", `translate(0,${innerHeight})`)
+        .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+
+    g.append("g")
+        .attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(8).tickFormat(d3.format(","))); // modified: positive y axis like sample
+
+    g.append("g")
+        .attr("class", "axis")
+        .attr("transform", `translate(${innerWidth},0)`)
+        .call(d3.axisRight(y).ticks(8).tickFormat(d3.format(","))); // modified: positive right y axis
+
+    const legend = svg.append("g")
+        .attr("class", "legend")
+        .attr("transform", `translate(${width - 190},${95})`);
+
+    keys.forEach((key, i) => {
+        const row = legend.append("g")
+            .attr("transform", `translate(0,${i * 28})`);
+
+        row.append("rect")
+            .attr("width", 18)
+            .attr("height", 18)
+            .attr("fill", color(key));
+
+        row.append("text")
+            .attr("x", 28)
+            .attr("y", 14)
+            .text(key);
+    });
+
+    svg.append("text")
+        .attr("class", "source")
+        .attr("x", width / 2)
+        .attr("y", height - 18)
+        .attr("text-anchor", "middle")
+        .text("Data source: self-created dataset for streamgraph visualization practice");
+});
+</script>
+
+</body>
+</html>
